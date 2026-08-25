@@ -115,11 +115,12 @@
   #overlay{
     position:fixed; inset:0; background:rgba(10,11,13,0.72);
     display:none; align-items:center; justify-content:center; padding:20px; z-index:10;
+    overflow-y:auto;
   }
   #overlay.open{ display:flex; }
   #settingsPanel{
     background:var(--panel); border:1px solid var(--line); border-radius:14px;
-    width:100%; max-width:380px; padding:20px;
+    width:100%; max-width:380px; padding:20px; margin:auto;
   }
   #settingsPanel h2{
     font-family:'IBM Plex Mono', monospace; font-size:13px; text-transform:uppercase;
@@ -171,12 +172,24 @@
 <div id="overlay">
   <div id="settingsPanel">
     <h2>Configuración</h2>
+
     <div class="field">
-      <label for="apiKey">API key de Anthropic</label>
-      <input type="password" id="apiKey" placeholder="sk-ant-...">
-      <div class="hint">Se guarda solo en este dispositivo (localStorage), nunca se envía a nadie más que a api.anthropic.com. Consíguela en <a href="https://platform.claude.com" target="_blank">platform.claude.com</a>.</div>
+      <label for="providerSelect">Proveedor</label>
+      <select id="providerSelect">
+        <option value="anthropic">Anthropic (directo)</option>
+        <option value="openrouter">OpenRouter</option>
+      </select>
     </div>
+
     <div class="field">
+      <label for="apiKey" id="apiKeyLabel">API key de Anthropic</label>
+      <input type="password" id="apiKey" placeholder="sk-ant-...">
+      <div class="hint" id="apiKeyHint">
+        Se guarda solo en este dispositivo (localStorage), nunca se envía a nadie más que a api.anthropic.com. Consíguela en <a href="https://platform.claude.com" target="_blank">platform.claude.com</a>.
+      </div>
+    </div>
+
+    <div class="field" id="anthropicModelField">
       <label for="modelSelect">Modelo</label>
       <select id="modelSelect">
         <option value="claude-haiku-4-5-20251001">Haiku 4.5 — rápido y barato</option>
@@ -184,6 +197,15 @@
         <option value="claude-opus-4-8">Opus 4.8 — máxima capacidad</option>
       </select>
     </div>
+
+    <div class="field" id="openrouterModelField" style="display:none;">
+      <label for="openrouterModelInput">Modelo (ID de OpenRouter)</label>
+      <input type="text" id="openrouterModelInput" placeholder="openrouter/free">
+      <div class="hint">
+        <b>openrouter/free</b> es gratis siempre — rota solo entre los modelos gratis disponibles en el momento. Para elegir uno específico (gratis o de paga), copia el ID exacto desde <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a> — ej. <b>deepseek/deepseek-chat-v3.1</b> o <b>anthropic/claude-sonnet-5</b>.
+      </div>
+    </div>
+
     <div class="row">
       <button id="closeSettings">Cerrar</button>
       <button id="saveSettings">Guardar</button>
@@ -201,25 +223,36 @@ const sendBtn = document.getElementById('sendBtn');
 const modelReadout = document.getElementById('modelReadout');
 const overlay = document.getElementById('overlay');
 
-const STORAGE_KEY = 'chatia.apiKey';
-const MODEL_KEY = 'chatia.model';
+const KEY_APIKEY = 'chatia.apiKey';
+const KEY_MODEL = 'chatia.model';
+const KEY_PROVIDER = 'chatia.provider';
+const KEY_OR_MODEL = 'chatia.openrouterModel';
 const MESSAGES_KEY = 'chatia.messages';
+
 const MODEL_LABELS = {
   'claude-haiku-4-5-20251001': 'Haiku 4.5',
   'claude-sonnet-5': 'Sonnet 5',
   'claude-opus-4-8': 'Opus 4.8'
 };
 
-let apiKey = localStorage.getItem(STORAGE_KEY) || '';
-let model = localStorage.getItem(MODEL_KEY) || 'claude-haiku-4-5-20251001';
+let apiKey = localStorage.getItem(KEY_APIKEY) || '';
+let model = localStorage.getItem(KEY_MODEL) || 'claude-haiku-4-5-20251001';
+let provider = localStorage.getItem(KEY_PROVIDER) || 'anthropic';
+let openrouterModel = localStorage.getItem(KEY_OR_MODEL) || 'openrouter/free';
 let messages = JSON.parse(localStorage.getItem(MESSAGES_KEY) || '[]');
 
 function saveMessages(){
   localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
 }
 
+function activeModelLabel(){
+  if(provider === 'openrouter') return openrouterModel;
+  return MODEL_LABELS[model] || model;
+}
+
 function updateReadout(){
-  modelReadout.textContent = MODEL_LABELS[model] || model;
+  const providerTag = provider === 'openrouter' ? 'OpenRouter' : 'Anthropic';
+  modelReadout.textContent = providerTag + ' · ' + activeModelLabel();
 }
 
 function renderChat(){
@@ -228,8 +261,8 @@ function renderChat(){
     const empty = document.createElement('div');
     empty.className = 'empty-state';
     empty.innerHTML = apiKey
-      ? 'Escribe abajo para empezar.<br>Modelo activo: <b>' + (MODEL_LABELS[model]||model) + '</b>'
-      : 'Primero abre <b>⚙ Configuración</b><br>y pega tu API key de Anthropic.';
+      ? 'Escribe abajo para empezar.<br>Modelo activo: <b>' + activeModelLabel() + '</b>'
+      : 'Primero abre <b>⚙ Configuración</b><br>y pega tu API key.';
     chatEl.appendChild(empty);
     return;
   }
@@ -256,6 +289,50 @@ inputEl.addEventListener('keydown', (e) => {
 });
 sendBtn.addEventListener('click', sendMessage);
 
+async function callAnthropic(msgs){
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: model,
+      max_tokens: 1024,
+      messages: msgs
+    })
+  });
+  const data = await res.json();
+  if(!res.ok){
+    const detail = (data && data.error && data.error.message) ? data.error.message : ('HTTP ' + res.status);
+    throw new Error(detail);
+  }
+  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+}
+
+async function callOpenRouter(msgs){
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'Authorization': 'Bearer ' + apiKey
+    },
+    body: JSON.stringify({
+      model: openrouterModel,
+      messages: msgs
+    })
+  });
+  const data = await res.json();
+  if(!res.ok){
+    const detail = (data && data.error && data.error.message) ? data.error.message : ('HTTP ' + res.status);
+    throw new Error(detail);
+  }
+  const choice = (data.choices || [])[0];
+  return choice && choice.message ? choice.message.content : '(sin respuesta de texto)';
+}
+
 async function sendMessage(){
   const text = inputEl.value.trim();
   if(!text) return;
@@ -277,37 +354,13 @@ async function sendMessage(){
   sendBtn.disabled = true;
 
   try{
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: model,
-        max_tokens: 1024,
-        messages: messages.map(m => ({role: m.role, content: m.content}))
-      })
-    });
-
-    const data = await res.json();
+    const msgs = messages.map(m => ({role: m.role, content: m.content}));
+    const textOut = provider === 'openrouter' ? await callOpenRouter(msgs) : await callAnthropic(msgs);
     thinking.remove();
-
-    if(!res.ok){
-      const detail = (data && data.error && data.error.message) ? data.error.message : ('HTTP ' + res.status);
-      messages.push({role:'error', content:'Error: ' + detail});
-    } else {
-      const textOut = (data.content || [])
-        .filter(b => b.type === 'text')
-        .map(b => b.text)
-        .join('\n');
-      messages.push({role:'assistant', content: textOut || '(sin respuesta de texto)'});
-    }
+    messages.push({role:'assistant', content: textOut || '(sin respuesta de texto)'});
   } catch(err){
     thinking.remove();
-    messages.push({role:'error', content:'Error de red: ' + err.message});
+    messages.push({role:'error', content:'Error: ' + err.message});
   }
 
   saveMessages();
@@ -317,19 +370,40 @@ async function sendMessage(){
 }
 
 // Settings panel
+function toggleProviderFields(selectedProvider){
+  const isOR = selectedProvider === 'openrouter';
+  document.getElementById('anthropicModelField').style.display = isOR ? 'none' : 'block';
+  document.getElementById('openrouterModelField').style.display = isOR ? 'block' : 'none';
+  document.getElementById('apiKeyLabel').textContent = isOR ? 'API key de OpenRouter' : 'API key de Anthropic';
+  document.getElementById('apiKey').placeholder = isOR ? 'sk-or-v1-...' : 'sk-ant-...';
+  document.getElementById('apiKeyHint').innerHTML = isOR
+    ? 'Se guarda solo en este dispositivo. Consíguela en <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>.'
+    : 'Se guarda solo en este dispositivo (localStorage), nunca se envía a nadie más que a api.anthropic.com. Consíguela en <a href="https://platform.claude.com" target="_blank">platform.claude.com</a>.';
+}
+
 function openSettingsPanel(){
   document.getElementById('apiKey').value = apiKey;
   document.getElementById('modelSelect').value = model;
+  document.getElementById('providerSelect').value = provider;
+  document.getElementById('openrouterModelInput').value = openrouterModel;
+  toggleProviderFields(provider);
   overlay.classList.add('open');
 }
 document.getElementById('openSettings').addEventListener('click', openSettingsPanel);
 document.getElementById('closeSettings').addEventListener('click', () => overlay.classList.remove('open'));
+document.getElementById('providerSelect').addEventListener('change', (e) => toggleProviderFields(e.target.value));
 
 document.getElementById('saveSettings').addEventListener('click', () => {
   apiKey = document.getElementById('apiKey').value.trim();
   model = document.getElementById('modelSelect').value;
-  localStorage.setItem(STORAGE_KEY, apiKey);
-  localStorage.setItem(MODEL_KEY, model);
+  provider = document.getElementById('providerSelect').value;
+  openrouterModel = document.getElementById('openrouterModelInput').value.trim() || 'openrouter/free';
+
+  localStorage.setItem(KEY_APIKEY, apiKey);
+  localStorage.setItem(KEY_MODEL, model);
+  localStorage.setItem(KEY_PROVIDER, provider);
+  localStorage.setItem(KEY_OR_MODEL, openrouterModel);
+
   updateReadout();
   overlay.classList.remove('open');
   renderChat();
