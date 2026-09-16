@@ -28,17 +28,46 @@
   body{
     margin:0; background:var(--bg); color:var(--text);
     font-family:'IBM Plex Sans', system-ui, sans-serif;
-    display:flex; flex-direction:column;
+    display:flex; flex-direction:row;
     overflow:hidden;
   }
+
+  #sidebar{
+    width:260px; flex-shrink:0; background:var(--panel);
+    border-right:1px solid var(--line);
+    display:flex; flex-direction:column; padding:12px;
+  }
+  #newConvBtn{
+    background:var(--amber-dim); border:1px solid var(--amber); color:var(--amber);
+    border-radius:8px; padding:10px; font-size:13px; font-weight:500;
+    cursor:pointer; margin-bottom:12px; font-family:'IBM Plex Sans', sans-serif;
+  }
+  #newConvBtn:hover{ background:var(--amber); color:#14171c; }
+  #convList{ flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+  .conv-item{
+    display:flex; align-items:center; justify-content:space-between; gap:6px;
+    padding:9px 10px; border-radius:8px; cursor:pointer; font-size:13px;
+    color:var(--text-dim); border:1px solid transparent;
+  }
+  .conv-item:hover{ background:var(--panel-2); color:var(--text); }
+  .conv-item.active{ background:var(--panel-2); color:var(--text); border-color:var(--line); }
+  .conv-title{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .conv-delete{
+    background:none; border:none; color:var(--text-dim); cursor:pointer;
+    font-size:15px; padding:0 2px; line-height:1; flex-shrink:0;
+  }
+  .conv-delete:hover{ color:var(--danger); }
+
+  #sidebarOverlay{ display:none; }
+
+  #main{ flex:1; min-width:0; display:flex; flex-direction:column; height:100%; }
+
   header{
     display:flex; align-items:center; justify-content:space-between;
     padding:14px 16px; border-bottom:1px solid var(--line);
     background:var(--panel);
   }
-  .brand{
-    display:flex; align-items:center; gap:10px;
-  }
+  .brand{ display:flex; align-items:center; gap:10px; }
   .brand-dot{
     width:10px; height:10px; border-radius:3px; background:var(--amber);
     box-shadow:0 0 8px var(--amber);
@@ -51,6 +80,7 @@
     font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-dim);
     letter-spacing:0.03em;
   }
+  .header-actions{ display:flex; gap:8px; }
   header button{
     background:none; border:1px solid var(--line); color:var(--text-dim);
     width:36px; height:36px; border-radius:8px; cursor:pointer;
@@ -58,6 +88,7 @@
     font-size:16px;
   }
   header button:hover{ border-color:var(--amber); color:var(--amber); }
+  #toggleSidebar{ display:none; }
 
   #chat{
     flex:1; overflow-y:auto; padding:18px 14px 10px;
@@ -67,24 +98,15 @@
     max-width:82%; padding:10px 13px; border-radius:12px;
     line-height:1.45; font-size:14.5px; white-space:pre-wrap; word-wrap:break-word;
   }
-  .msg.user{
-    align-self:flex-end; background:var(--user-bubble);
-    border-bottom-right-radius:3px;
-  }
-  .msg.assistant{
-    align-self:flex-start; background:var(--panel-2);
-    border:1px solid var(--line);
-    border-bottom-left-radius:3px;
-  }
+  .msg.user{ align-self:flex-end; background:var(--user-bubble); border-bottom-right-radius:3px; }
+  .msg.assistant{ align-self:flex-start; background:var(--panel-2); border:1px solid var(--line); border-bottom-left-radius:3px; }
   .msg.error{
-    align-self:flex-start; background:transparent;
-    border:1px solid var(--danger); color:var(--danger);
-    font-family:'IBM Plex Mono', monospace; font-size:12.5px;
+    align-self:flex-start; background:transparent; border:1px solid var(--danger);
+    color:var(--danger); font-family:'IBM Plex Mono', monospace; font-size:12.5px;
   }
   .msg.thinking{
     align-self:flex-start; color:var(--text-dim);
-    font-family:'IBM Plex Mono', monospace; font-size:12px;
-    letter-spacing:0.03em;
+    font-family:'IBM Plex Mono', monospace; font-size:12px; letter-spacing:0.03em;
   }
   .empty-state{
     margin:auto; text-align:center; color:var(--text-dim); max-width:320px;
@@ -105,16 +127,14 @@
   #inputbar textarea:focus{ outline:none; border-color:var(--amber); }
   #sendBtn{
     width:46px; border-radius:10px; border:1px solid var(--amber);
-    background:var(--amber-dim); color:var(--amber); font-size:18px;
-    cursor:pointer;
+    background:var(--amber-dim); color:var(--amber); font-size:18px; cursor:pointer;
   }
   #sendBtn:disabled{ opacity:0.4; cursor:default; }
   #sendBtn:not(:disabled):hover{ background:var(--amber); color:#14171c; }
 
-  /* Settings overlay */
   #overlay{
     position:fixed; inset:0; background:rgba(10,11,13,0.72);
-    display:none; align-items:center; justify-content:center; padding:20px; z-index:10;
+    display:none; align-items:center; justify-content:center; padding:20px; z-index:30;
     overflow-y:auto;
   }
   #overlay.open{ display:flex; }
@@ -147,26 +167,51 @@
   #saveSettings{ background:var(--amber); border:1px solid var(--amber); color:#14171c; }
   #closeSettings{ background:none; border:1px solid var(--line); color:var(--text-dim); }
   #clearChat{ background:none; border:1px solid var(--danger); color:var(--danger); }
+
+  @media (max-width: 768px){
+    #sidebar{
+      position:fixed; top:0; left:0; bottom:0; z-index:20;
+      width:78vw; max-width:300px;
+      transform:translateX(-100%); transition:transform 0.2s ease;
+    }
+    #sidebar.open{ transform:translateX(0); }
+    #sidebarOverlay{
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:19;
+    }
+    #sidebarOverlay.open{ display:block; }
+    #toggleSidebar{ display:flex; }
+  }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="brand">
-    <div class="brand-dot"></div>
-    <div>
-      <div class="brand-title">Chat IA</div>
-      <div class="model-readout" id="modelReadout">—</div>
+<div id="sidebar">
+  <button id="newConvBtn">+ Nueva conversación</button>
+  <div id="convList"></div>
+</div>
+<div id="sidebarOverlay"></div>
+
+<div id="main">
+  <header>
+    <div class="brand">
+      <button id="toggleSidebar" title="Conversaciones">☰</button>
+      <div class="brand-dot"></div>
+      <div>
+        <div class="brand-title">Chat IA</div>
+        <div class="model-readout" id="modelReadout">—</div>
+      </div>
     </div>
+    <div class="header-actions">
+      <button id="openSettings" title="Configuración">⚙</button>
+    </div>
+  </header>
+
+  <div id="chat"></div>
+
+  <div id="inputbar">
+    <textarea id="input" rows="1" placeholder="Escribe un mensaje..."></textarea>
+    <button id="sendBtn">➤</button>
   </div>
-  <button id="openSettings" title="Configuración">⚙</button>
-</header>
-
-<div id="chat"></div>
-
-<div id="inputbar">
-  <textarea id="input" rows="1" placeholder="Escribe un mensaje..."></textarea>
-  <button id="sendBtn">➤</button>
 </div>
 
 <div id="overlay">
@@ -202,7 +247,7 @@
       <label for="openrouterModelInput">Modelo (ID de OpenRouter)</label>
       <input type="text" id="openrouterModelInput" placeholder="openrouter/free">
       <div class="hint">
-        <b>openrouter/free</b> es gratis siempre — rota solo entre los modelos gratis disponibles en el momento. Para elegir uno específico (gratis o de paga), copia el ID exacto desde <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a> — ej. <b>deepseek/deepseek-chat-v3.1</b> o <b>anthropic/claude-sonnet-5</b>.
+        <b>openrouter/free</b> es gratis siempre. Para otro, copia el ID exacto desde <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a>.
       </div>
     </div>
 
@@ -211,7 +256,7 @@
       <button id="saveSettings">Guardar</button>
     </div>
     <div class="row">
-      <button id="clearChat">Borrar conversación</button>
+      <button id="clearChat">Borrar esta conversación</button>
     </div>
   </div>
 </div>
@@ -222,12 +267,17 @@ const inputEl = document.getElementById('input');
 const sendBtn = document.getElementById('sendBtn');
 const modelReadout = document.getElementById('modelReadout');
 const overlay = document.getElementById('overlay');
+const sidebarEl = document.getElementById('sidebar');
+const sidebarOverlayEl = document.getElementById('sidebarOverlay');
+const convListEl = document.getElementById('convList');
 
 const KEY_APIKEY = 'chatia.apiKey';
 const KEY_MODEL = 'chatia.model';
 const KEY_PROVIDER = 'chatia.provider';
 const KEY_OR_MODEL = 'chatia.openrouterModel';
-const MESSAGES_KEY = 'chatia.messages';
+const KEY_CONVERSATIONS = 'chatia.conversations';
+const KEY_ACTIVE_ID = 'chatia.activeId';
+const LEGACY_MESSAGES_KEY = 'chatia.messages';
 
 const MODEL_LABELS = {
   'claude-haiku-4-5-20251001': 'Haiku 4.5',
@@ -239,11 +289,167 @@ let apiKey = localStorage.getItem(KEY_APIKEY) || '';
 let model = localStorage.getItem(KEY_MODEL) || 'claude-haiku-4-5-20251001';
 let provider = localStorage.getItem(KEY_PROVIDER) || 'anthropic';
 let openrouterModel = localStorage.getItem(KEY_OR_MODEL) || 'openrouter/free';
-let messages = JSON.parse(localStorage.getItem(MESSAGES_KEY) || '[]');
 
-function saveMessages(){
-  localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
+// --- IndexedDB: guarda las conversaciones (async, sin límite de ~5-10MB) ---
+const DB_NAME = 'chatia-db';
+const DB_VERSION = 1;
+const STORE = 'conversations';
+
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
+
+async function dbGetAll(){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbPut(conv){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(conv);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function dbDelete(id){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+let conversations = [];
+let activeId = localStorage.getItem(KEY_ACTIVE_ID) || null;
+
+function saveActiveId(){
+  if(activeId) localStorage.setItem(KEY_ACTIVE_ID, activeId);
+  else localStorage.removeItem(KEY_ACTIVE_ID);
+}
+
+function deriveTitle(msgs){
+  const firstUser = msgs.find(m => m.role === 'user');
+  if(!firstUser) return 'Nueva conversación';
+  const t = firstUser.content.trim();
+  return t.length > 36 ? t.slice(0, 36) + '…' : t;
+}
+
+// Migra una sola vez desde localStorage (versión anterior) a IndexedDB.
+async function migrateIfNeeded(){
+  const existing = await dbGetAll();
+  if(existing.length > 0) return existing;
+
+  const oldConvs = JSON.parse(localStorage.getItem(KEY_CONVERSATIONS) || 'null');
+  const legacy = JSON.parse(localStorage.getItem(LEGACY_MESSAGES_KEY) || '[]');
+  let toMigrate = [];
+  if(oldConvs && oldConvs.length){
+    toMigrate = oldConvs;
+  } else if(legacy.length){
+    toMigrate = [{ id: 'conv_' + Date.now(), title: deriveTitle(legacy), messages: legacy }];
+  }
+  for(const c of toMigrate){ await dbPut(c); }
+  return toMigrate;
+}
+
+async function initApp(){
+  conversations = await migrateIfNeeded();
+  if(!activeId || !conversations.find(c => c.id === activeId)){
+    activeId = conversations.length ? conversations[0].id : null;
+    saveActiveId();
+  }
+  updateReadout();
+  renderSidebar();
+  renderChat();
+}
+
+function getActiveConversation(){
+  return conversations.find(c => c.id === activeId) || null;
+}
+
+async function createConversation(){
+  const conv = { id: 'conv_' + Date.now(), title: 'Nueva conversación', messages: [] };
+  conversations.push(conv);
+  activeId = conv.id;
+  saveActiveId();
+  await dbPut(conv);
+  renderSidebar();
+  renderChat();
+  closeSidebarOnMobile();
+}
+
+function switchConversation(id){
+  activeId = id;
+  saveActiveId();
+  renderSidebar();
+  renderChat();
+  closeSidebarOnMobile();
+}
+
+async function deleteConversation(id){
+  if(!confirm('¿Borrar esta conversación? Esto no se puede deshacer.')) return;
+  conversations = conversations.filter(c => c.id !== id);
+  if(activeId === id){
+    activeId = conversations.length ? conversations[0].id : null;
+    saveActiveId();
+  }
+  await dbDelete(id);
+  renderSidebar();
+  renderChat();
+}
+
+function renderSidebar(){
+  convListEl.innerHTML = '';
+  conversations.slice().reverse().forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'conv-item' + (c.id === activeId ? ' active' : '');
+    const title = document.createElement('span');
+    title.className = 'conv-title';
+    title.textContent = c.title || 'Nueva conversación';
+    const del = document.createElement('button');
+    del.className = 'conv-delete';
+    del.textContent = '×';
+    del.title = 'Eliminar';
+    item.appendChild(title);
+    item.appendChild(del);
+    item.addEventListener('click', () => switchConversation(c.id));
+    del.addEventListener('click', (e) => { e.stopPropagation(); deleteConversation(c.id); });
+    convListEl.appendChild(item);
+  });
+}
+
+function closeSidebarOnMobile(){
+  if(window.innerWidth <= 768){
+    sidebarEl.classList.remove('open');
+    sidebarOverlayEl.classList.remove('open');
+  }
+}
+
+document.getElementById('newConvBtn').addEventListener('click', createConversation);
+document.getElementById('toggleSidebar').addEventListener('click', () => {
+  sidebarEl.classList.toggle('open');
+  sidebarOverlayEl.classList.toggle('open');
+});
+sidebarOverlayEl.addEventListener('click', () => {
+  sidebarEl.classList.remove('open');
+  sidebarOverlayEl.classList.remove('open');
+});
 
 function activeModelLabel(){
   if(provider === 'openrouter') return openrouterModel;
@@ -257,16 +463,21 @@ function updateReadout(){
 
 function renderChat(){
   chatEl.innerHTML = '';
-  if(messages.length === 0){
+  const conv = getActiveConversation();
+  if(!conv || conv.messages.length === 0){
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.innerHTML = apiKey
-      ? 'Escribe abajo para empezar.<br>Modelo activo: <b>' + activeModelLabel() + '</b>'
-      : 'Primero abre <b>⚙ Configuración</b><br>y pega tu API key.';
+    if(!apiKey){
+      empty.innerHTML = 'Primero abre <b>⚙ Configuración</b><br>y pega tu API key.';
+    } else if(!conv){
+      empty.innerHTML = 'Dale a <b>+ Nueva conversación</b><br>para empezar a chatear.';
+    } else {
+      empty.innerHTML = 'Escribe abajo para empezar.<br>Modelo activo: <b>' + activeModelLabel() + '</b>';
+    }
     chatEl.appendChild(empty);
     return;
   }
-  messages.forEach(m => {
+  conv.messages.forEach(m => {
     const div = document.createElement('div');
     div.className = 'msg ' + m.role;
     div.textContent = m.content;
@@ -280,12 +491,8 @@ function autoGrow(){
   inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
 }
 inputEl.addEventListener('input', autoGrow);
-
 inputEl.addEventListener('keydown', (e) => {
-  if(e.key === 'Enter' && !e.shiftKey){
-    e.preventDefault();
-    sendMessage();
-  }
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
 });
 sendBtn.addEventListener('click', sendMessage);
 
@@ -298,11 +505,7 @@ async function callAnthropic(msgs){
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true'
     },
-    body: JSON.stringify({
-      model: model,
-      max_tokens: 1024,
-      messages: msgs
-    })
+    body: JSON.stringify({ model: model, max_tokens: 1024, messages: msgs })
   });
   const data = await res.json();
   if(!res.ok){
@@ -315,14 +518,8 @@ async function callAnthropic(msgs){
 async function callOpenRouter(msgs){
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey
-    },
-    body: JSON.stringify({
-      model: openrouterModel,
-      messages: msgs
-    })
+    headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify({ model: openrouterModel, messages: msgs })
   });
   const data = await res.json();
   if(!res.ok){
@@ -336,12 +533,21 @@ async function callOpenRouter(msgs){
 async function sendMessage(){
   const text = inputEl.value.trim();
   if(!text) return;
-  if(!apiKey){
-    openSettingsPanel();
-    return;
+  if(!apiKey){ openSettingsPanel(); return; }
+
+  if(!getActiveConversation()){
+    const conv = { id: 'conv_' + Date.now(), title: 'Nueva conversación', messages: [] };
+    conversations.push(conv);
+    activeId = conv.id;
+    saveActiveId();
   }
-  messages.push({role:'user', content:text});
-  saveMessages();
+  const conv = getActiveConversation();
+
+  conv.messages.push({role:'user', content:text});
+  if(conv.messages.length === 1) conv.title = deriveTitle(conv.messages);
+  await dbPut(conv);
+  renderSidebar();
+
   inputEl.value = '';
   autoGrow();
   renderChat();
@@ -354,22 +560,21 @@ async function sendMessage(){
   sendBtn.disabled = true;
 
   try{
-    const msgs = messages.map(m => ({role: m.role, content: m.content}));
+    const msgs = conv.messages.map(m => ({role: m.role, content: m.content}));
     const textOut = provider === 'openrouter' ? await callOpenRouter(msgs) : await callAnthropic(msgs);
     thinking.remove();
-    messages.push({role:'assistant', content: textOut || '(sin respuesta de texto)'});
+    conv.messages.push({role:'assistant', content: textOut || '(sin respuesta de texto)'});
   } catch(err){
     thinking.remove();
-    messages.push({role:'error', content:'Error: ' + err.message});
+    conv.messages.push({role:'error', content:'Error: ' + err.message});
   }
 
-  saveMessages();
+  await dbPut(conv);
   renderChat();
   sendBtn.disabled = false;
   inputEl.focus();
 }
 
-// Settings panel
 function toggleProviderFields(selectedProvider){
   const isOR = selectedProvider === 'openrouter';
   document.getElementById('anthropicModelField').style.display = isOR ? 'none' : 'block';
@@ -409,20 +614,17 @@ document.getElementById('saveSettings').addEventListener('click', () => {
   renderChat();
 });
 
-document.getElementById('clearChat').addEventListener('click', () => {
-  if(confirm('¿Borrar toda la conversación? Esto no se puede deshacer.')){
-    messages = [];
-    saveMessages();
-    renderChat();
+document.getElementById('clearChat').addEventListener('click', async () => {
+  const conv = getActiveConversation();
+  if(!conv) { overlay.classList.remove('open'); return; }
+  if(confirm('¿Borrar esta conversación? Esto no se puede deshacer.')){
+    await deleteConversation(conv.id);
     overlay.classList.remove('open');
   }
 });
 
-// Init
-updateReadout();
-renderChat();
+initApp();
 
-// PWA: registrar service worker
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => {});
