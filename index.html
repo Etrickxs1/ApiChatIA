@@ -492,7 +492,12 @@ function autoGrow(){
 }
 inputEl.addEventListener('input', autoGrow);
 inputEl.addEventListener('keydown', (e) => {
-  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+  // Enter = salto de línea (comportamiento natural del textarea).
+  // Para enviar: botón ➤  o  Ctrl+Enter / Cmd+Enter.
+  if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){
+    e.preventDefault();
+    sendMessage();
+  }
 });
 sendBtn.addEventListener('click', sendMessage);
 
