@@ -626,7 +626,9 @@ inputEl.addEventListener('keydown', (e) => {
 });
 sendBtn.addEventListener('click', sendMessage);
 
-async function callAnthropic(msgs){
+// --- Llamada a Anthropic con streaming ---
+// onChunk(textoAcumulado) se llama cada vez que llega un pedazo nuevo.
+async function callAnthropic(msgs, onChunk){
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -635,29 +637,115 @@ async function callAnthropic(msgs){
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true'
     },
-    body: JSON.stringify({ model: model, max_tokens: 4096, messages: msgs })
+    body: JSON.stringify({ model: model, max_tokens: 4096, messages: msgs, stream: true })
   });
-  const data = await res.json();
+
   if(!res.ok){
-    const detail = (data && data.error && data.error.message) ? data.error.message : ('HTTP ' + res.status);
+    // En error, la API responde JSON normal (no stream). Lo leemos tal cual.
+    let detail = 'HTTP ' + res.status;
+    try{
+      const data = await res.json();
+      if(data && data.error && data.error.message) detail = data.error.message;
+    }catch(_){}
     throw new Error(detail);
   }
-  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  while(true){
+    const { done, value } = await reader.read();
+    if(done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE: los eventos se separan por doble salto de línea
+    const events = buffer.split('\n\n');
+    buffer = events.pop(); // el último puede estar incompleto, lo guardamos
+
+    for(const evt of events){
+      const lines = evt.split('\n');
+      for(const line of lines){
+        if(!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if(!payload || payload === '[DONE]') continue;
+        let json;
+        try{ json = JSON.parse(payload); }catch(_){ continue; }
+
+        // Anthropic manda varios tipos de eventos; solo nos interesa el delta de texto
+        if(json.type === 'content_block_delta' && json.delta && json.delta.type === 'text_delta'){
+          fullText += json.delta.text;
+          if(onChunk) onChunk(fullText);
+        }
+        // Evento de error en medio del stream
+        if(json.type === 'error' && json.error && json.error.message){
+          throw new Error(json.error.message);
+        }
+      }
+    }
+  }
+
+  return fullText;
 }
 
-async function callOpenRouter(msgs){
+// --- Llamada a OpenRouter con streaming (formato OpenAI) ---
+async function callOpenRouter(msgs, onChunk){
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-    body: JSON.stringify({ model: openrouterModel, messages: msgs })
+    body: JSON.stringify({ model: openrouterModel, messages: msgs, stream: true })
   });
-  const data = await res.json();
+
   if(!res.ok){
-    const detail = (data && data.error && data.error.message) ? data.error.message : ('HTTP ' + res.status);
+    let detail = 'HTTP ' + res.status;
+    try{
+      const data = await res.json();
+      if(data && data.error && data.error.message) detail = data.error.message;
+    }catch(_){}
     throw new Error(detail);
   }
-  const choice = (data.choices || [])[0];
-  return choice && choice.message ? choice.message.content : '(sin respuesta de texto)';
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  while(true){
+    const { done, value } = await reader.read();
+    if(done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const events = buffer.split('
+
+');
+    buffer = events.pop();
+
+    for(const evt of events){
+      const lines = evt.split('
+');
+      for(const line of lines){
+        if(!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if(!payload || payload === '[DONE]') continue;
+        let json;
+        try{ json = JSON.parse(payload); }catch(_){ continue; }
+
+        // OpenRouter usa el formato OpenAI: choices[0].delta.content
+        const choice = (json.choices || [])[0];
+        const delta = choice && choice.delta ? choice.delta.content : null;
+        if(delta){
+          fullText += delta;
+          if(onChunk) onChunk(fullText);
+        }
+        if(json.error && json.error.message){
+          throw new Error(json.error.message);
+        }
+      }
+    }
+  }
+
+  return fullText || '(sin respuesta de texto)';
 }
 
 async function sendMessage(){
@@ -682,23 +770,34 @@ async function sendMessage(){
   autoGrow();
   renderChat();
 
-  const thinking = document.createElement('div');
-  thinking.className = 'msg thinking';
-  thinking.textContent = 'pensando...';
-  chatEl.appendChild(thinking);
+// Burbuja del asistente que se irá llenando en vivo
+const liveBubble = document.createElement('div');
+liveBubble.className = 'msg assistant';
+liveBubble.textContent = 'pensando...';
+chatEl.appendChild(liveBubble);
+chatEl.scrollTop = chatEl.scrollHeight;
+sendBtn.disabled = true;
+
+// Se llama cada vez que llega texto nuevo del stream
+let firstChunk = true;
+const onChunk = (acumulado) => {
+  if(firstChunk){ liveBubble.textContent = ''; firstChunk = false; }
+  // Mientras llega, mostramos texto plano (rápido). Al final re-renderizamos con markdown.
+  liveBubble.textContent = acumulado;
   chatEl.scrollTop = chatEl.scrollHeight;
-  sendBtn.disabled = true;
+};
 
-  try{
-    const msgs = conv.messages.map(m => ({role: m.role, content: m.content}));
-    const textOut = provider === 'openrouter' ? await callOpenRouter(msgs) : await callAnthropic(msgs);
-    thinking.remove();
-    conv.messages.push({role:'assistant', content: textOut || '(sin respuesta de texto)'});
-  } catch(err){
-    thinking.remove();
-    conv.messages.push({role:'error', content:'Error: ' + err.message});
-  }
+try{
+  const msgs = conv.messages.map(m => ({role: m.role, content: m.content}));
+  const textOut = provider === 'openrouter'
+    ? await callOpenRouter(msgs, onChunk)
+    : await callAnthropic(msgs, onChunk);
+  conv.messages.push({role:'assistant', content: textOut || '(sin respuesta de texto)'});
+} catch(err){
+  conv.messages.push({role:'error', content:'Error: ' + err.message});
+}
 
+liveBubble.remove();
   await dbPut(conv);
   renderChat();
   sendBtn.disabled = false;
