@@ -716,14 +716,12 @@ async function callOpenRouter(msgs, onChunk){
     if(done) break;
     buffer += decoder.decode(value, { stream: true });
 
-    const events = buffer.split('
-
-');
+    // SSE: los eventos se separan por doble salto de línea (\n\n)
+    const events = buffer.split('\n\n');
     buffer = events.pop();
 
     for(const evt of events){
-      const lines = evt.split('
-');
+      const lines = evt.split('\n');
       for(const line of lines){
         if(!line.startsWith('data:')) continue;
         const payload = line.slice(5).trim();
