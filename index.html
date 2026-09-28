@@ -300,11 +300,13 @@
 
     <div class="field" id="anthropicModelField">
       <label for="modelSelect">Modelo</label>
-      <select id="modelSelect">
-        <option value="claude-haiku-4-5-20251001">Haiku 4.5 — rápido y barato</option>
-        <option value="claude-sonnet-5">Sonnet 5 — uso general</option>
-        <option value="claude-opus-4-8">Opus 4.8 — máxima capacidad</option>
-      </select>
+<select id="modelSelect">
+  <option value="claude-haiku-4-5-20251001">Haiku 4.5 — rápido y barato</option>
+  <option value="claude-sonnet-5">Sonnet 5 — uso general</option>
+  <option value="claude-opus-4-8">Opus 4.8 — máxima capacidad</option>
+  <option value="claude-opus-5-5">Opus 5.5 — flagship</option>
+  <option value="claude-fable-5">Fable 5 — el más capaz</option>
+</select>
     </div>
 
     <div class="field" id="openrouterModelField" style="display:none;">
@@ -348,9 +350,10 @@ const LEGACY_MESSAGES_KEY = 'chatia.messages';
 const MODEL_LABELS = {
   'claude-haiku-4-5-20251001': 'Haiku 4.5',
   'claude-sonnet-5': 'Sonnet 5',
-  'claude-opus-4-8': 'Opus 4.8'
+  'claude-opus-4-8': 'Opus 4.8',
+  'claude-opus-5-5': 'Opus 5.5',
+  'claude-fable-5': 'Fable 5'
 };
-
 let apiKey = localStorage.getItem(KEY_APIKEY) || '';
 let model = localStorage.getItem(KEY_MODEL) || 'claude-haiku-4-5-20251001';
 let provider = localStorage.getItem(KEY_PROVIDER) || 'anthropic';
