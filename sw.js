@@ -1,4 +1,4 @@
-const CACHE = 'chatia-v1';
+const CACHE = 'chatia-v2';
 const APP_SHELL = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -18,19 +18,44 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const req = event.request;
+  const url = new URL(req.url);
 
-  // Nunca interceptar llamadas a la API de Claude: siempre deben ir a la red
+  // Nunca interceptar llamadas a la API ni a CDNs externos
   if (url.hostname !== self.location.hostname) return;
 
-  // App shell: red primero, si falla usa el caché (para poder abrir sin internet)
+  // Solo manejamos GET
+  if (req.method !== 'GET') return;
+
+  const isNavigation =
+    req.mode === 'navigate' ||
+    (req.headers.get('accept') || '').includes('text/html') ||
+    url.pathname.endsWith('.html');
+
+  if (isNavigation) {
+    // HTML: SIEMPRE a la red, ignorando la caché HTTP del navegador.
+    // Si no hay red, caemos al caché del SW (offline).
+    event.respondWith(
+      fetch(req, { cache: 'no-store' })
+        .then((res) => {
+          const clone = res.clone();
+          caches.open(CACHE).then((cache) => cache.put(req, clone));
+          return res;
+        })
+        .catch(() => caches.match(req).then((c) => c || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Resto de assets (manifest, íconos): caché primero, red de respaldo
   event.respondWith(
-    fetch(event.request)
-      .then((res) => {
+    caches.match(req).then((cached) => {
+      if (cached) return cached;
+      return fetch(req).then((res) => {
         const clone = res.clone();
-        caches.open(CACHE).then((cache) => cache.put(event.request, clone));
+        caches.open(CACHE).then((cache) => cache.put(req, clone));
         return res;
-      })
-      .catch(() => caches.match(event.request))
+      });
+    })
   );
 });
