@@ -637,7 +637,7 @@ async function callAnthropic(msgs, onChunk){
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true'
     },
-    body: JSON.stringify({ model: model, max_tokens: 4096, messages: msgs, stream: true })
+    body: JSON.stringify({ model: model, max_tokens: 8192, messages: msgs, stream: true })
   });
 
   if(!res.ok){
