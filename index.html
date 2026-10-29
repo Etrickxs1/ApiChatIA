@@ -786,7 +786,11 @@ const onChunk = (acumulado) => {
 };
 
 try{
-  const msgs = conv.messages.map(m => ({role: m.role, content: m.content}));
+  // Filtramos los mensajes de error locales antes de enviar a la API.
+  // La API solo acepta roles 'user' y 'assistant' (y 'system').
+  const msgs = conv.messages
+    .filter(m => m.role !== 'error')
+    .map(m => ({role: m.role, content: m.content}));
   const textOut = provider === 'openrouter'
     ? await callOpenRouter(msgs, onChunk)
     : await callAnthropic(msgs, onChunk);
